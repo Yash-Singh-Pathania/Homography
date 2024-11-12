@@ -1,30 +1,31 @@
-// src/components/ImageCanvas.js
+// ImageCanvas.js
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button } from '@mui/material';
+import { Box, Button, CircularProgress } from '@mui/material';
 import { FabricJSCanvas, useFabricJSEditor } from 'fabricjs-react';
 import axios from 'axios';
 
 function ImageCanvas({ image }) {
     const { editor, onReady } = useFabricJSEditor();
     const [points, setPoints] = useState([]);
+    const [isRectangleDrawn, setIsRectangleDrawn] = useState(false);
     const [transformedImage, setTransformedImage] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
     const canvasRef = useRef(null);
 
     const MAX_CANVAS_WIDTH = 800;
     const MAX_CANVAS_HEIGHT = 600;
 
-    let scaleFactor = 1; // Declare scaleFactor here to use it in point conversion
+    let scaleFactor = 1;
 
     useEffect(() => {
         if (editor && image) {
             const img = new window.Image();
             img.src = image;
             img.onload = () => {
-                // Calculate scale factor to fit the image within the max canvas size
                 scaleFactor = Math.min(
                     MAX_CANVAS_WIDTH / img.width,
                     MAX_CANVAS_HEIGHT / img.height,
-                    1 // Ensure we do not scale up if the image is smaller than the max size
+                    1
                 );
 
                 const canvasWidth = img.width * scaleFactor;
@@ -46,7 +47,6 @@ function ImageCanvas({ image }) {
                     editor.canvas.renderAll.bind(editor.canvas)
                 );
 
-                // Temporary array for points to avoid re-render on every click
                 const tempPoints = [];
 
                 editor.canvas.on('mouse:down', function (options) {
@@ -63,13 +63,38 @@ function ImageCanvas({ image }) {
                         });
                         editor.canvas.add(circle);
 
-                        // Scale points to original image dimensions
                         const originalX = x / scaleFactor;
                         const originalY = y / scaleFactor;
                         tempPoints.push([originalX, originalY]);
 
+                        if (tempPoints.length > 1) {
+                            const line = new window.fabric.Line(
+                                [
+                                    tempPoints[tempPoints.length - 2][0] * scaleFactor,
+                                    tempPoints[tempPoints.length - 2][1] * scaleFactor,
+                                    x,
+                                    y,
+                                ],
+                                { stroke: 'blue', selectable: false }
+                            );
+                            editor.canvas.add(line);
+                        }
+
                         if (tempPoints.length === 4) {
-                            setPoints(tempPoints); // Set points after selecting four points
+                            setPoints(tempPoints);
+                            setIsRectangleDrawn(true);
+
+                            // Connect the last point to the first to complete the rectangle
+                            const line = new window.fabric.Line(
+                                [
+                                    x,
+                                    y,
+                                    tempPoints[0][0] * scaleFactor,
+                                    tempPoints[0][1] * scaleFactor,
+                                ],
+                                { stroke: 'blue', selectable: false }
+                            );
+                            editor.canvas.add(line);
                         }
                     }
                 });
@@ -81,6 +106,7 @@ function ImageCanvas({ image }) {
         if (editor) {
             editor.canvas.clear();
             setPoints([]);
+            setIsRectangleDrawn(false);
             setTransformedImage(null);
         }
     };
@@ -90,6 +116,8 @@ function ImageCanvas({ image }) {
             alert('Please select exactly 4 points.');
             return;
         }
+
+        setIsLoading(true);
 
         try {
             const response = await fetch(image);
@@ -104,6 +132,7 @@ function ImageCanvas({ image }) {
                 const byteArray = Uint8Array.from(Buffer.from(res.data.image, 'hex'));
                 const blob = new Blob([byteArray], { type: 'image/jpeg' });
                 const url = URL.createObjectURL(blob);
+
                 setTransformedImage(url);
             } else {
                 alert('Transformation failed.');
@@ -111,31 +140,36 @@ function ImageCanvas({ image }) {
         } catch (error) {
             console.error(error);
             alert('An error occurred during transformation.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <Box mt={2} textAlign="center">
+        <Box
+            mt={2}
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+        >
             <FabricJSCanvas
                 ref={canvasRef}
                 className="canvas"
                 onReady={onReady}
                 style={{
                     border: '1px solid #ddd',
-                    marginTop: '20px',
                     width: `${MAX_CANVAS_WIDTH}px`,
                     height: `${MAX_CANVAS_HEIGHT}px`,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
                 }}
             />
-            <Box mt={2}>
+            <Box mt={2} display="flex" alignItems="center">
                 <Button
                     variant="contained"
                     color="primary"
                     onClick={handleTransform}
-                    disabled={points.length !== 4}
+                    disabled={points.length !== 4 || isLoading}
+                    style={{ marginRight: '10px' }}
                 >
                     Transform Image
                 </Button>
@@ -143,10 +177,15 @@ function ImageCanvas({ image }) {
                     variant="outlined"
                     color="secondary"
                     onClick={handleReset}
-                    style={{ marginLeft: '10px' }}
+                    disabled={isLoading}
                 >
                     Reset
                 </Button>
+                {isLoading && (
+                    <Box ml={2}>
+                        <CircularProgress size={24} />
+                    </Box>
+                )}
             </Box>
             {transformedImage && (
                 <Box mt={2}>

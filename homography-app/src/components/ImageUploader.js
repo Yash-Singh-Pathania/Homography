@@ -1,4 +1,4 @@
-// src/components/ImageUploader.js
+// ImageUploader.js
 import React, { useState } from 'react';
 import { Button, Box, Typography } from '@mui/material';
 import ImageCanvas from './ImageCanvas';
@@ -15,7 +15,14 @@ function ImageUploader() {
     };
 
     return (
-        <Box textAlign="center">
+        <Box
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            minHeight="60vh"
+            textAlign="center"
+        >
             <input
                 accept="image/*"
                 style={{ display: 'none' }}
